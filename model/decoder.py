@@ -4,12 +4,15 @@ import torch.nn as nn
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
-        layers = [ConvBNRelu(3, 64)]
-        for _ in range(6):
-            layers.append(ConvBNRelu(64, 64))
+        self.channels = 64  # 卷积通道数
+        self.decoder_blocks = 7  # 卷积块块数
+        layers = [ConvBNRelu(3, self.channels)]
+        for _ in range(self.decoder_blocks - 1):
+            layers.append(ConvBNRelu(self.channels, self.channels))
 
-        layers.append(ConvBNRelu(64, 30))
+        layers.append(ConvBNRelu(self.channels, 30))
 
+        # 将输入特征图池化为一个指定大小的输出。
         layers.append(nn.AdaptiveAvgPool2d(output_size=(1, 1)))
         self.layers = nn.Sequential(*layers)
 
@@ -18,6 +21,7 @@ class Decoder(nn.Module):
 
     def forward(self, image_with_wm):
         x = self.layers(image_with_wm)
+        # 去除张量x中第三个和第二个维度（从0开始）
         x.squeeze_(3).squeeze_(2)
         x = self.linear(x)
         return x

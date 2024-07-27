@@ -6,22 +6,13 @@ from torch.nn import init
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.H = 128  # 指定输入图像高度
-        self.W = 128  # 指定输入图像宽度
-        self.conv_channels = 64  # 卷积通道数
-        self.num_blocks = 4  # 卷积块块数
-        layers = [ConvBNRelu(3, self.conv_channels)]
-        for _ in range(self.num_blocks - 1):
-            layer = ConvBNRelu(self.conv_channels, self.conv_channels)
+        layers = [ConvBNRelu(33, 64)]
+        for _ in range(3):
+            layer = ConvBNRelu(64, 64)
             layers.append(layer)
-        # 包含4个ConvBNRelu块
         self.conv_layers = nn.Sequential(*layers)
-
-        # Ico：3通道 + 特征图：64通道 + message: 30长度  => 64通道
-        self.after_concat_layer = ConvBNRelu(self.conv_channels + 3 + 30, self.conv_channels)
-
-        # 64通道 => 3通道 图片大小不变
-        self.final_layer = nn.Conv2d(self.conv_channels, 3, kernel_size=1)
+        self.after_concat_layer = ConvBNRelu(64 + 3 + 30, 64)
+        self.final_layer = nn.Conv2d(64, 3, kernel_size=1)
         # self.se = SEAttention(channel=97)
 
     def forward(self, image, message):
@@ -29,19 +20,30 @@ class Encoder(nn.Module):
         expanded_message.unsqueeze_(-1)
 
         # 1 * 30 * 128 * 128
-        expanded_message = expanded_message.expand(-1, -1, self.H, self.W)
+        expanded_message = expanded_message.expand(-1, -1, 128, 128)
 
-        # 1 * 64 * 128 * 128 特征图
-        encoded_image = self.conv_layers(image)
+        # 分离出YUV空间的各通道
+        Y_channel = image[:, 0, :, :].unsqueeze(1)
+        U_channel = image[:, 1, :, :].unsqueeze(1)
+        V_channel = image[:, 2, :, :].unsqueeze(1)
 
-        # 1 * 97 * 128 * 128
-        concat = torch.cat([expanded_message, encoded_image, image], dim=1)
+        # 将水印concat到U通道, 1 * 31 * 128 * 128
+        U_channel_concat = torch.cat((U_channel, expanded_message), dim=1)
+
+        # 再将Y, 新的U和V通道concat成最终的图像, 1 * 33 * 128 * 128
+        final_image = torch.cat((Y_channel, U_channel_concat, V_channel), dim=1)
+
+        # 1 * 64 * 128 * 128
+        encoded_image = self.conv_layers(final_image)
+
+        # skip connection  1 * 97 * 128 * 128
+        combined = torch.cat([expanded_message, encoded_image, image], dim=1)
 
         # SEAttention
         # combined = self.se(combined)
 
         # 1 * 64 * 128 * 128
-        im_w = self.after_concat_layer(concat)
+        im_w = self.after_concat_layer(combined)
 
         # 1 * 3 * 128 * 128
         im_w = self.final_layer(im_w)
