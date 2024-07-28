@@ -12,17 +12,19 @@ class Decoder(nn.Module):
 
         layers.append(ConvBNRelu(self.channels, 30))
 
-        # 将输入特征图池化为一个指定大小的输出。
+        # 将输入特征图池化为一个指定大小的输出。输入特征图的空间维度（高度和宽度）池化为 1x1
         layers.append(nn.AdaptiveAvgPool2d(output_size=(1, 1)))
         self.layers = nn.Sequential(*layers)
 
-        # 恒等映射，不改变输入的大小或形状。
+        # 全连接层（线性层）。 输入特征的维度，输出特征维度
         self.linear = nn.Linear(30, 30)
 
     def forward(self, image_with_wm):
+        # 1 * 30 * 1 * 1
         x = self.layers(image_with_wm)
-        # 去除张量x中第三个和第二个维度（从0开始）
+        # squeeze_不指定维度时，会移除所有大小为 1 的维度。squeeze_(dim)会移除特定维度 dim，且该维度大小为1时。
         x.squeeze_(3).squeeze_(2)
+        # 全连接层（线性层）一般用于处理二维张量，形状为 (batch_size, num_features)
         x = self.linear(x)
         return x
 
