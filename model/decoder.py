@@ -12,7 +12,7 @@ class Decoder(nn.Module):
 
         layers.append(ConvBNRelu(self.channels, 30))
 
-        # 将输入特征图池化为一个指定大小的输出。输入特征图的空间维度（高度和宽度）池化为 1x1
+        # 将输入特征图池化为一个指定大小的输出。将输入特征图的空间维度（高度和宽度）池化为 1x1（例如池化为：1 * 30 * 1 * 1）
         layers.append(nn.AdaptiveAvgPool2d(output_size=(1, 1)))
         self.layers = nn.Sequential(*layers)
 
