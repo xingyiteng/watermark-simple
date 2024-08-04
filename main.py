@@ -6,12 +6,22 @@ from torchvision.utils import save_image
 
 from model.decoder import Decoder
 from model.encoder import Encoder
+from noise_layers.crop import Crop
+from noise_layers.cropout import Cropout
+from noise_layers.noiser import Noiser
 from util.rgb_to_yuv import rgb_to_yuv_tensor
 
 
 def main():
-    encoder()
-    decoder()
+    # 编码图片
+    encoded_and_cover = encoder()
+
+    # 添加噪音
+    noise_encoded = noise(encoded_and_cover, 'cuda' if torch.cuda.is_available() else 'cpu')
+
+    # 解码图片
+    watermark = decoder(noise_encoded)
+    print('extract message: ', watermark)
 
 
 def encoder():
@@ -32,15 +42,52 @@ def encoder():
 
     # 3. 嵌入水印
     encoder_model = Encoder()
-    res = encoder_model(rgb_tensor_image, message).squeeze(0)
+    res = encoder_model(rgb_tensor_image, message)
 
-    # 4. 保存生成的图片
+    # 4. 保存编码图片
     save_image(res, 'test_emb.png')
 
+    print('generate encoder image successful')
 
-def decoder():
+    # 5. 返回编码图片 原始图片
+    return [res, rgb_tensor_image]
+
+
+def noise(encoded_and_cover: list, device):
+    # 引入噪声层模块，并指定对应的噪声列表
+    height_ratio_range = (0.2, 0.3)  # 随机裁剪高度比例范围
+    width_ratio_range = (0.4, 0.5)  # 随机裁剪宽度比例范围
+
+    noiser = Noiser([Crop(height_ratio_range, width_ratio_range), Cropout(height_ratio_range, width_ratio_range)], device)
+
+    # [编码图像，原始图像]作为噪声层的输入
+    noised_and_cover = noiser(encoded_and_cover)
+
+    # 获得加了噪声后的图像
+    noised_image = noised_and_cover[0]
+
+    # 保存噪声图片
+    save_image(noised_image, 'test_emb_noise.png')
+
+    print('generate noise image successful')
+
+    return noised_image
+
+
+def decoder(noise_encoded):
+    # 解析水印
+    decoder_model = Decoder()
+    message = decoder_model(noise_encoded)
+
+    message = message.detach().cpu().numpy().round().clip(0, 1)
+
+    print('extract message successful')
+    return message
+
+
+def decoder_v1():
     # 1. 加载图片
-    image = Image.open('test_emb.png')
+    image = Image.open('test_emb_noise.png')
 
     # 2. 调用方法将 RGB 图像转换为 YUV Tensor
     # yuv_tensor_image = rgb_to_yuv_tensor(image).unsqueeze(0)
